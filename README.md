@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/banner.svg" width="100%" alt="LinkedIn Poster MCP banner">
+<img src="assets/banner.jpg" width="100%" alt="LinkedIn Poster MCP banner">
 
 **LinkedIn Poster MCP — Publish to LinkedIn via natural language.**
 
