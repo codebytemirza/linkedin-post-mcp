@@ -1,82 +1,94 @@
-# MCP LinkedIn Poster
+<div align="center">
 
-A production-ready [Model Context Protocol](https://modelcontextprotocol.io) server that lets **Claude, Codex, Antigravity, or any MCP client** publish LinkedIn posts — text or images — on your behalf via natural language.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/banner.svg">
+  <img src="assets/banner.svg" width="100%" max-width="1100" alt="MCP LinkedIn Poster banner">
+</picture>
 
-Built as plain **Vercel serverless functions** (no framework), using the **MCP TypeScript SDK v2** with **Streamable HTTP** transport for remote use and a **stdio** entry for local desktop agents, **Upstash Redis** for token storage, and a hand-rolled **OAuth 2.0** flow against LinkedIn (no SDK, raw `fetch()`).
+**Publish text and image posts to LinkedIn from any MCP client, via natural language.**
+
+</div>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Node.js-24%2B-339933?logo=node.js&logoColor=white" alt="Node 24+">
+  <img src="https://img.shields.io/badge/Transport-Streamable%20HTTP%20%2B%20stdio-0A66C2" alt="transport">
+  <img src="https://img.shields.io/badge/Storage-Upstash%20Redis-DC382D" alt="Upstash Redis">
+  <img src="https://img.shields.io/badge/OAuth2-LinkedIn%20Rest-0A66C2" alt="LinkedIn OAuth2">
+  <img src="https://img.shields.io/github/license/codebytemirza/linkedin-post-mcp" alt="License">
+</p>
 
 ---
 
-## ✨ Features
+## Highlights
 
-- **Text posts** — publish a wall of your feed with a caption (`create_post`).
-- **Image posts** — single-image or multi-image (carousel) posts with alt text (`create_image_post`).
-- **Reliable image rendering** — after uploading, the server **polls LinkedIn's image status until `AVAILABLE`** before posting, so images never appear blank (see [Image upload](#image-upload) below).
-- **Profile lookup** — return your name & email.
-- **Auth health checks** — know exactly when your token expires.
-- **Admin dashboard** — a web UI (`/api/dashboard`) showing auth status, tool logs, and posted activity.
-- **Two transports** — production Streamable HTTP on Vercel, plus a bundled **stdio** entry for Claude Desktop / Codex / Antigravity running locally.
+- Text posts and single- or multi-image posts with alt text.
+- Reliable image rendering: the server polls LinkedIn until the image is processed (`AVAILABLE`) so posts never render blank.
+- Profile lookup and token expiry monitoring.
+- Optional admin dashboard with auth status and tool logs.
+- Two transports: production Streamable HTTP on Vercel, plus a bundled **stdio** entry for Claude Desktop / Codex / Antigravity.
 
-## 🧱 Tools
+---
+
+## MCP tools
 
 | Tool | Input | Returns |
 |------|-------|---------|
-| `create_post` | `text`, `visibility?` (`PUBLIC`/`CONNECTIONS`) | created post ID |
-| `create_image_post` | `caption`, `images: [{base64, mediaType?, altText?}]` (1–20), `visibility?` | created post ID |
-| `get_profile` | — | name + email |
-| `check_auth_status` | — | token existence, validity, and expiry times |
-
-## 🗂 Architecture
-
-```
-api/
-  authorize.ts   GET   -> redirects to LinkedIn OAuth consent screen (CSRF `state` in Redis)
-  callback.ts    GET   -> validates state, exchanges code for tokens, stores them, success page
-  mcp.ts         POST  -> the MCP endpoint (Streamable HTTP), bearer-auth, all tools
-  dashboard.ts   GET   -> admin dashboard API (auth status, tool logs, activity)
-frontend/               -> React + Tailwind + MUI dashboard source (built to public/)
-lib/
-  config.ts             env vars, URLs, Redis client (Redis.fromEnv())
-  linkedin-auth.ts      getValidAccessToken(), token exchange, refresh, CSRF helpers
-  linkedin-api.ts       fetchProfile(), createLinkedInPost(), createLinkedInImagePost()
-  logging.ts            structured tool/error logging to Redis
-  errors.ts             NotAuthorizedError, LinkedInError
-mcp-stdio.mjs           esbuild-bundled → stdio entry for local clients
-mcp-stdio-entry.mjs     source entry consumed by the esbuild step
-```
-
-Key design points:
-
-- Tokens live under the single Redis key **`linkedin:tokens`**.
-- The MCP endpoint is stateless and requires `Authorization: Bearer <MCP_AUTH_TOKEN>` on **every** request.
-- All LinkedIn calls use raw `fetch()` — no SDK.
+| `create_post` | `text`, `visibility?` | created post ID |
+| `create_image_post` | `caption`, `images[1..20]`, `visibility?` | created post ID |
+| `get_profile` | - | name + email |
+| `check_auth_status` | - | token validity and expiry |
 
 ---
 
-## 🚀 Prerequisites
+## Architecture
 
-- **Node.js 24+** (pinned via `engines`).
-- A **LinkedIn Developer app** with the approved scopes: `openid`, `profile`, `email`, `w_member_social`.
-- An **Upstash Redis** database (REST URL + token).
-- **Vercel** account + CLI for deployment.
+```text
+api/
+  authorize.ts     GET   authorize via LinkedIn OAuth (CSRF state in Redis)
+  callback.ts      GET   exchange code for tokens, store, success page
+  mcp.ts           POST  MCP endpoint (Streamable HTTP), bearer-auth, tools
+  dashboard.ts     GET   admin dashboard API (auth status, logs)
+frontend/                React + Tailwind + MUI dashboard source -> public/
+lib/
+  config.ts               env vars, URLs, Redis client
+  linkedin-auth.ts        token exchange, refresh, access-token helper
+  linkedin-api.ts         profile, create_post, create_image_post
+  logging.ts              structured logs to Redis
+  errors.ts               NotAuthorizedError, LinkedInError
+mcp-stdio.mjs        esbuild-bundled stdio entry for local clients
+mcp-stdio-entry.mjs  source entry for the bundling step
+```
+
+- Tokens are stored under the single Redis key `linkedin:tokens`.
+- `/api/mcp` is stateless and requires `Authorization: Bearer <MCP_AUTH_TOKEN>` on every request.
+- All LinkedIn calls use raw `fetch()`; no LinkedIn SDK.
+
+---
+
+## Prerequisites
+
+- Node.js 24 or newer.
+- A LinkedIn Developer app with approved scopes: `openid`, `profile`, `email`, `w_member_social`.
+- An Upstash Redis database.
 
 ### Environment variables
 
-Set these in Vercel (and a root `.env` for local dev):
+Set these in Vercel and in a root `.env` for local development:
 
 | Variable | Purpose |
 |----------|---------|
-| `LINKEDIN_CLIENT_ID` | LinkedIn app Client ID |
-| `LINKEDIN_CLIENT_SECRET` | LinkedIn app Client Secret |
-| `LINKEDIN_REDIRECT_URI` | Must match a whitelisted redirect URL **exactly** |
+| `LINKEDIN_CLIENT_ID` | LinkedIn app client ID |
+| `LINKEDIN_CLIENT_SECRET` | LinkedIn app client secret |
+| `LINKEDIN_REDIRECT_URI` | Must match a whitelisted redirect URL exactly |
 | `UPSTASH_REDIS_REST_URL` | Upstash Redis REST URL |
 | `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis REST token |
-| `MCP_AUTH_TOKEN` | Bearer token all MCP clients send to `/api/mcp` |
+| `MCP_AUTH_TOKEN` | Bearer token MCP clients send to `/api/mcp` |
 
-> 🔒 Never commit these. `.env`, `.env.local` are git-ignored; Vercel stores them as environment variables.
+These files are git-ignored; never commit secrets.
 
 ---
 
-## 🧪 Local development
+## Local development
 
 ```bash
 npm install
@@ -84,94 +96,84 @@ vercel dev          # serves http://localhost:3000/api/...
 npm run typecheck   # tsc --noEmit
 ```
 
-Env vars for local dev are read from a root `.env` file. Use these **Redirect URIs** (whitelist whichever you use in the [LinkedIn Developer Portal](https://www.linkedin.com/developers/apps)):
+Whitelist either redirect URL in the LinkedIn Developer Portal as an Authorized Redirect URL. LinkedIn matches redirects exactly (no query params).
 
 ```env
 # local (vercel dev)
 LINKEDIN_REDIRECT_URI=http://localhost:3000/api/callback
 
 # production (Vercel)
-LINKEDIN_REDIRECT_URI=https://post-mcp.vercel.app/api/callback
+LINKEDIN_REDIRECT_URI=https://<your-app>.vercel.app/api/callback
 ```
 
-LinkedIn only talks to URLs it trusts, and matching is **exact** (no query params, no `#`).
+Type-check and deployment:
 
----
-
-## 🔐 How OAuth works end to end
-
-1. **`/api/authorize`** — generates a random CSRF `state`, saves it to Redis (`PENDING_STATE_KEY`, 10‑min TTL), and 302-redirects your browser to LinkedIn with `response_type=code`, `client_id`, `redirect_uri`, and the scopes.
-2. **LinkedIn** authenticates you and redirects back to `/api/callback?code=…&state=…`.
-3. **`/api/callback`** — validates `state`, `POST`s to the token endpoint with `grant_type=authorization_code`, stores `access_token`, `expires_in`, `refresh_token`, `refresh_token_expires_in` in `linkedin:tokens`, and shows a success page.
-4. **MCP tools** — `getValidAccessToken()` reads `linkedin:tokens`; if the access token is near expiry **and a refresh token exists**, it mints a new one and updates Redis. It throws `NotAuthorizedError` if no tokens exist.
-
-> **Important:** LinkedIn only issues `refresh_token` when your app is provisioned for *programmatic refresh* (a limited set of partners). With the standard consumer scope set it typically no refresh token, so access tokens last **60 days** and the user re‑authorizes when they expire. `check_auth_status` reports the real state either way.
-
-### Connect the account once
-
-Open in a browser once to authorize the MCP server to post on your behalf:
-
-```
-https://post-mcp.vercel.app/api/authorize
+```bash
+npm run typecheck
+vercel           # preview
+vercel --prod    # production
 ```
 
 ---
 
-## 🖼 Image upload (why images never go blank)
+## OAuth flow
 
-LinkedIn's **Images API** uploads **asynchronously** — if a post is created before the image finishes processing, the feed renders a **blank image**. This server avoids that by:
+1. `/api/authorize` creates a CSRF `state`, stores it in Redis (10-minute TTL), and redirects to LinkedIn.
+2. LinkedIn authenticates and redirects back to `/api/callback?code=...&state=...`.
+3. `/api/callback` validates `state`, exchanges the code for tokens, and saves them to Redis.
+4. MCP tools call `getValidAccessToken()`, refreshing the token when near expiry and a refresh token exists, otherwise throwing `NotAuthorizedError`.
 
-1. `initializeUpload` → get a signed `uploadUrl` + URN.
-2. `PUT` the image bytes (`image/jpeg`, `image/png`, `image/gif`).
-3. **Poll `GET /rest/images/{urn}` until `status: AVAILABLE`** (a `downloadUrl` is present), then create the post.
+> LinkedIn issues a `refresh_token` only for apps provisioned with programmatic refresh. With the standard set scope, access tokens last 60 days and the user re-authorizes when they expire. `check_auth_status` reports the real state.
 
-Only fully processed images are attached to the post, so it always renders correctly.
-
----
-
-## 🤝 Connect an MCP client
-
-### Remote (any MCP client) via Streamable HTTP
-
-- **Type:** Custom / MCP server (Streamable HTTP)
-- **Endpoint (URL):** `https://post-mcp.vercel.app/api/mcp`
-- **Authentication → Authorization header:** `Bearer <MCP_AUTH_TOKEN>`
-
-For example in Claude (`claude.ai → Settings → Connectors → MCP`), enter the URL and the bearer header.
-
-### Local (Claude Desktop / Codex / Antigravity) via stdio
-
-The bundled `mcp-stdio.mjs` entry reads your `.env` itself and serves the same tools over stdio, so no deployment is needed to use it locally. Point the client at:
-
-```
-node D:\mcp-post\mcp-stdio.mjs
-```
+Authorize once by opening `/api/authorize` in a browser.
 
 ---
 
-## ☁️ Deploy to Vercel
+## Image upload
+
+LinkedIn's Images API uploads asynchronously. Creating a post before the image finishes processing produces a blank feed image. This server:
+
+1. Registers the upload and receives a signed `uploadUrl`.
+2. Uploads the image bytes.
+3. Polls the image status until it is `AVAILABLE`, then creates the post.
+
+Only fully processed images are attached, so posts always render.
+
+---
+
+## Client setup
+
+### Remote (Streamable HTTP)
+
+- Type: Custom / MCP server, Streamable HTTP.
+- Endpoint: `https://<your-deployed-url>/api/mcp`
+- Authorization header: `Bearer <MCP_AUTH_TOKEN>`
+
+### Local (stdio)
+
+Point the client at the bundled entry:
+
+```text
+node /path/to/linkedin-post-mcp/mcp-stdio.mjs
+```
+
+---
+
+## Deploy to Vercel
 
 ```bash
 vercel           # preview
 vercel --prod    # production
 ```
 
-- `vercel.json` pins the `api/**` functions to the **Node.js 24** runtime (or your `engines` value).
-- `LINKEDIN_REDIRECT_URI` must be the production callback URL and be whitelisted in LinkedIn.
-- After deploying, run `/api/authorize` once, then the tools work.
-- Build output `public/` is generated from `frontend/` and is git-ignored; the dashboard source lives in `frontend/src`.
+- `vercel.json` pins `api/**` to the Node.js 24 runtime.
+- Set the production callback URL for LinkedIn.
+- After deploying, open `/api/authorize`, then the tools work.
 
 ---
 
-## 🔒 Security notes
+## Security
 
-- Secrets are read only from environment variables; **nothing is logged**.
-- Every `/api/mcp` request requires the bearer token before any protocol handling.
-- OAuth `state` prevents CSRF; short TTL, consumed (deleted) on use.
-- `.env` / `.env.local` / `.vercel` / `node_modules` / `tmp` / build output are all git-ignored.
-
-## 🧹 Maintenance
-
-- `npm run typecheck` — type-check the whole project.
-- Rebuild the stdio bundle after editing source: `esbuild mcp-stdio-entry.mjs → mcp-stdio.mjs`.
-- Redeploy with `vercel --prod` whenever serverless/API code changes.
+- Secrets come from environment variables only; nothing is logged.
+- The MCP endpoint requires a bearer token before protocol handling.
+- OAuth `state` guards against CSRF and is one-time-use with a short TTL.
