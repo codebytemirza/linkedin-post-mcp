@@ -1,9 +1,6 @@
 <div align="center">
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/banner.svg">
-  <img src="assets/banner.svg" width="100%" max-width="1100" alt="MCP LinkedIn Poster banner">
-</picture>
+<img src="assets/banner.jpg" width="100%" alt="MCP LinkedIn Poster banner">
 
 **Publish text and image posts to LinkedIn from any MCP client, via natural language.**
 
