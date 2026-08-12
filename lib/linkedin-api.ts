@@ -99,14 +99,23 @@ export async function createLinkedInPost(
   return id;
 }
 
-export interface ImageInput {
-  /** Base64-encoded image bytes (no data URI prefix). */
-  base64: string;
-  /** MIME type, e.g. "image/jpeg", "image/png". */
-  mediaType?: string;
-  /** Optional alt text for accessibility. */
-  altText?: string;
-}
+/**
+ * ImageInput supports two paths:
+ *  - imageUrn: pre-uploaded via get_image_upload_link / upload-and-forward (preferred)
+ *  - base64:   legacy direct-encode path (kept for backward compatibility)
+ */
+export type ImageInput =
+  | {
+      /** LinkedIn image URN returned after upload-and-forward. No bytes needed. */
+      imageUrn: string;
+      altText?: string;
+    }
+  | {
+      /** Base64-encoded image bytes (no data URI prefix). Legacy path. */
+      base64: string;
+      mediaType?: string;
+      altText?: string;
+    };
 
 export interface CreateImagePostArgs {
   caption: string;
@@ -126,12 +135,14 @@ function decodeBase64(data: string): Buffer {
   return Buffer.from(cleaned, "base64");
 }
 
+type Base64ImageInput = Extract<ImageInput, { base64: string }>;
+
 /**
  * Fails fast on inputs that cannot possibly upload to LinkedIn, instead of
  * silently polling until timeout. Verifies the base64 decodes and the bytes
  * carry a real JPEG/PNG/GIF magic number.
  */
-export function resolveImageInput(index: number, input: ImageInput): { buffer: Buffer; mediaType: string } {
+export function resolveImageInput(index: number, input: Base64ImageInput): { buffer: Buffer; mediaType: string } {
   let buffer: Buffer;
   try {
     buffer = decodeBase64(input.base64);
@@ -194,7 +205,7 @@ export function resolveImageInput(index: number, input: ImageInput): { buffer: B
 async function uploadLinkedInImage(
   accessToken: string,
   personSub: string,
-  input: ImageInput
+  input: Base64ImageInput
 ): Promise<string> {
   const { buffer: bytes, mediaType } = resolveImageInput(0, input);
   const initRes = await fetch(LINKEDIN_IMAGE_INIT_URL, {
@@ -291,14 +302,29 @@ export async function createLinkedInImagePost(
   const urns: { id: string; altText?: string }[] = [];
   for (let i = 0; i < args.images.length; i++) {
     const image = args.images[i];
-    const { buffer, mediaType } = resolveImageInput(i, image);
-    await logEvent("tool", "info", "create_image_post", {
-      detail: `validated image ${i + 1} (${mediaType}, ${buffer.length} bytes)`,
-    });
-    urns.push({
-      id: await uploadLinkedInImage(accessToken, personSub, { ...image, base64: buffer.toString("base64"), mediaType }),
-      altText: image.altText,
-    });
+
+    if ("imageUrn" in image) {
+      // Upload-and-forward path: LinkedIn already processed this image.
+      // Zero bytes involved — just use the URN directly.
+      await logEvent("tool", "info", "create_image_post", {
+        detail: `image ${i + 1}: using pre-uploaded URN ${image.imageUrn}`,
+      });
+      urns.push({ id: image.imageUrn, altText: image.altText });
+    } else {
+      // Legacy base64 path: validate, upload, and poll.
+      const { buffer, mediaType } = resolveImageInput(i, image);
+      await logEvent("tool", "info", "create_image_post", {
+        detail: `image ${i + 1}: uploading via base64 (${mediaType}, ${buffer.length} bytes)`,
+      });
+      urns.push({
+        id: await uploadLinkedInImage(accessToken, personSub, {
+          base64: buffer.toString("base64"),
+          mediaType,
+          altText: image.altText,
+        }),
+        altText: image.altText,
+      });
+    }
   }
 
   let content: unknown;

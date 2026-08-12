@@ -4,6 +4,7 @@ export const LINKEDIN_CLIENT_ID = process.env.LINKEDIN_CLIENT_ID ?? "";
 export const LINKEDIN_CLIENT_SECRET = process.env.LINKEDIN_CLIENT_SECRET ?? "";
 export const LINKEDIN_REDIRECT_URI = process.env.LINKEDIN_REDIRECT_URI ?? "";
 export const MCP_AUTH_TOKEN = process.env.MCP_AUTH_TOKEN ?? "";
+export const APP_BASE_URL = (process.env.APP_BASE_URL ?? "https://post-mcp.vercel.app").replace(/\/$/, "");
 
 export const AUTHORIZE_URL = "https://post-mcp.vercel.app/api/authorize";
 
@@ -21,6 +22,7 @@ export const OAUTH_SCOPES = ["openid", "profile", "email", "w_member_social"];
 
 export const TOKEN_CACHE_KEY = "linkedin:tokens";
 export const PENDING_STATE_KEY = "linkedin:auth:pending-state";
+export const UPLOAD_FILE_PREFIX = "linkedin:upload:";
 
 // Per the Upstash skill: create the client from environment variables and let
 // the SDK auto-serialize/deserialize JS types.
