@@ -3,6 +3,7 @@ import { MCP_AUTH_TOKEN, redis } from "../lib/config";
 import { fetchProfile } from "../lib/linkedin-api";
 import { readStoredTokens } from "../lib/linkedin-auth";
 import { readLogs, type LogEntry } from "../lib/logging";
+import { isValidOAuthBearerToken } from "../lib/oauth";
 
 interface DashboardPayload {
   ok: boolean;
@@ -34,8 +35,12 @@ function respond(res: VercelResponse, payload: DashboardPayload) {
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const authHeader = req.headers.authorization ?? "";
-  const expected = `Bearer ${MCP_AUTH_TOKEN}`;
-  if (!MCP_AUTH_TOKEN || authHeader !== expected) {
+  const token = authHeader.startsWith("Bearer ")
+    ? authHeader.slice("Bearer ".length).trim()
+    : "";
+  const isOAuth = token ? await isValidOAuthBearerToken(token) : false;
+  const isStatic = !!(MCP_AUTH_TOKEN && token && token === MCP_AUTH_TOKEN);
+  if (!isOAuth && !isStatic) {
     res.status(401).json({ error: "Unauthorized", message: "A valid Bearer token is required." });
     return;
   }

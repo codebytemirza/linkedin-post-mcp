@@ -5,5 +5,27 @@
     "api/**/*.ts": {
       "maxDuration": 15
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/.well-known/oauth-authorization-server",
+      "destination": "/api/oauth/well-known"
+    },
+    {
+      "source": "/oauth/authorize",
+      "destination": "/api/oauth/authorize"
+    },
+    {
+      "source": "/oauth/token",
+      "destination": "/api/oauth/token"
+    },
+    {
+      "source": "/oauth/revoke",
+      "destination": "/api/oauth/revoke"
+    },
+    {
+      "source": "/oauth/register",
+      "destination": "/api/oauth/register"
+    }
+  ]
 }
