@@ -77,6 +77,27 @@ Facts worth remembering:
 - `/api/mcp` is stateless and requires `Authorization: Bearer <MCP_AUTH_TOKEN>` on every request.
 - **All LinkedIn calls** use raw `fetch()` — no LinkedIn SDK dependency.
 
+## AI agent guidelines (read this, or image posts get stuck)
+
+These rules are also baked into each tool's MCP description so Claude, GPT, and
+any other client receives them automatically. Following them prevents the
+"stuck tool call" failure mode:
+
+1. **Never fabricate image bytes.** Only call `create_image_post` after the user
+   provides an actual image file. Read that file and send its true base64.
+   If you don't have the file, ask the user for it instead of guessing.
+2. **One image = one response.** Placeholder or truncated base64 is rejected
+   with a fast `400` error — the server validates JPEG/PNG/GIF magic bytes
+   before it ever contacts LinkedIn.
+3. **mediaType must match the bytes**, or omit it.
+4. **Slow is not failed.** After upload, LinkedIn processes images
+   asynchronously for up to ~30s before the post is created. A long wait is
+   normal; do not abort or report failure while it runs.
+5. **Timeouts are terminal.** A `504` means processing didn't finish in time —
+   report it, don't retry the same bytes.
+6. **Auth errors are not retryable.** "LinkedIn is not authorized" means the
+   user must open `/api/authorize` in a browser. Retrying wastes a turn.
+
 ## OAuth flow
 
 One authorization, sixty days of posting.

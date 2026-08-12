@@ -48,7 +48,7 @@ export function createLinkedInServer(): McpServer {
     {
       title: "Create a LinkedIn post",
       description:
-        "Publishes a text post to the authorized user's LinkedIn feed. Returns the created post's ID.",
+        "Publishes a text post to the authorized user's LinkedIn feed. Returns the created post's ID. If the tool reports that LinkedIn is not authorized, do NOT retry; ask the user to open the authorization URL in a browser first.",
       inputSchema: z.object({
         text: z.string().describe("The content of the LinkedIn post to publish."),
         visibility: z
@@ -76,8 +76,17 @@ export function createLinkedInServer(): McpServer {
     "create_image_post",
     {
       title: "Create a LinkedIn post with an image",
-      description:
-        "Uploads one or more images and publishes a LinkedIn post with a caption to the authorized user's feed. Images are supplied as base64-encoded bytes. One image renders as a single-image post; two or more render as a multi-image post. Returns the created post's ID.",
+      description: `Uploads one or more images and publishes a LinkedIn post with a caption to the authorized user's feed. Images are supplied as base64-encoded bytes.
+
+MANDATORY GUIDELINES FOR AI AGENTS (FAILING THEM CAUSES FAILED OR STUCK CALLS):
+1. NEVER fabricate, guess, truncate, or reuse base64. Only call this tool after the user provides an actual image file. Read that real file and encode its true bytes. If you do not have the real image file, do NOT call this tool; ask the user to attach the image first.
+2. STRICTLY one image = one response. Multi-image posts (2 to 20 images) each need their own real file. Placeholder images, empty strings, or lorem-ipsum-like strings are invalid.
+3. This server fails fast with a clear error (400) if the bytes do not decode to a real JPEG/PNG/GIF. Do not retry the same invalid input; instead ask the user for the real file.
+4. MediaType must match the actual bytes (image/jpeg, image/png, image/gif). Omit it if unsure.
+5. EXPECT a wait: after upload, LinkedIn processes the image asynchronously, which can take up to ~30 seconds before the post is created. A slow response is normal, not an error. Do not abort, do not report failure while waiting.
+6. If image processing times out (504), tell the user the image did not finish processing in time rather than fabricating a success.
+
+Single image renders as a single-image post; 2 or more render as a multi-image post. Returns the created post's ID.`,
       inputSchema: z.object({
         caption: z.string().describe("The caption/text for the LinkedIn post."),
         images: z

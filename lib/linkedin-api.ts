@@ -116,7 +116,71 @@ export interface CreateImagePostArgs {
 
 function decodeBase64(data: string): Buffer {
   const withoutPrefix = data.includes(",") ? data.slice(data.indexOf(",") + 1) : data;
-  return Buffer.from(withoutPrefix, "base64");
+  const cleaned = withoutPrefix.replace(/\s+/g, "");
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(cleaned)) {
+    throw new LinkedInError(
+      400,
+      "Invalid base64 payload: the string contains characters that are not valid base64. Pass the true base64 bytes read from the actual image file, not a fabricated or truncated value."
+    );
+  }
+  return Buffer.from(cleaned, "base64");
+}
+
+/**
+ * Fails fast on inputs that cannot possibly upload to LinkedIn, instead of
+ * silently polling until timeout. Verifies the base64 decodes and the bytes
+ * carry a real JPEG/PNG/GIF magic number.
+ */
+export function resolveImageInput(index: number, input: ImageInput): { buffer: Buffer; mediaType: string } {
+  let buffer: Buffer;
+  try {
+    buffer = decodeBase64(input.base64);
+  } catch (err) {
+    if (err instanceof LinkedInError) throw err;
+    throw new LinkedInError(
+      400,
+      `image ${index + 1} failed validation: base64 could not be decoded. Note for AI agents: never invent base64. Read the user's actual image file and encode its real bytes.`
+    );
+  }
+  if (buffer.length < 16) {
+    throw new LinkedInError(
+      400,
+      `image ${index + 1} failed validation: decoded payload is too small (${buffer.length} bytes) to be a real image. Send the complete, unmodified file bytes.`
+    );
+  }
+
+  const isJpeg = buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  const isPng =
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0d &&
+    buffer[5] === 0x0a &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0x0a;
+  const isGif = buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x38;
+
+  let mediaType: string;
+  if (isJpeg) mediaType = "image/jpeg";
+  else if (isPng) mediaType = "image/png";
+  else if (isGif) mediaType = "image/gif";
+  else {
+    throw new LinkedInError(
+      400,
+      `image ${index + 1} failed validation: bytes do not match a supported image format (JPEG, PNG, or GIF). Only real image files can be uploaded.`
+    );
+  }
+
+  const declared = input.mediaType?.toLowerCase();
+  if (declared && declared !== mediaType) {
+    throw new LinkedInError(
+      400,
+      `image ${index + 1} failed validation: declared mediaType "${declared}" does not match the actual format (${mediaType}). Use the real format or omit the field.`
+    );
+  }
+
+  return { buffer, mediaType };
 }
 
 /**
@@ -127,8 +191,12 @@ function decodeBase64(data: string): Buffer {
  * a post created before the image finishes processing renders blank.
  * Returns the resulting "urn:li:image:{id}" asset URN once ready.
  */
-async function uploadLinkedInImage(accessToken: string, personSub: string, input: ImageInput): Promise<string> {
-  const bytes = decodeBase64(input.base64);
+async function uploadLinkedInImage(
+  accessToken: string,
+  personSub: string,
+  input: ImageInput
+): Promise<string> {
+  const { buffer: bytes, mediaType } = resolveImageInput(0, input);
   const initRes = await fetch(LINKEDIN_IMAGE_INIT_URL, {
     method: "POST",
     headers: {
@@ -162,7 +230,7 @@ async function uploadLinkedInImage(accessToken: string, personSub: string, input
     method: "PUT",
     headers: {
       Authorization: `Bearer ${accessToken}`,
-      "Content-Type": input.mediaType ?? "application/octet-stream",
+      "Content-Type": mediaType,
       "Content-Length": String(bytes.length),
     },
     body: bytes,
@@ -221,8 +289,16 @@ export async function createLinkedInImagePost(
   args: CreateImagePostArgs
 ): Promise<string> {
   const urns: { id: string; altText?: string }[] = [];
-  for (const image of args.images) {
-    urns.push({ id: await uploadLinkedInImage(accessToken, personSub, image), altText: image.altText });
+  for (let i = 0; i < args.images.length; i++) {
+    const image = args.images[i];
+    const { buffer, mediaType } = resolveImageInput(i, image);
+    await logEvent("tool", "info", "create_image_post", {
+      detail: `validated image ${i + 1} (${mediaType}, ${buffer.length} bytes)`,
+    });
+    urns.push({
+      id: await uploadLinkedInImage(accessToken, personSub, { ...image, base64: buffer.toString("base64"), mediaType }),
+      altText: image.altText,
+    });
   }
 
   let content: unknown;
